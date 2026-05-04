@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>AgriSense — Threat Intelligence</title>
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=Orbitron:wght@400;700;900&family=IBM+Plex+Mono:wght@300;400;600&display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --black:   #040a04;
+  --deep:    #071007;
+  --forest:  #0c1f0c;
+  --card:    #0f1f0f;
+  --border:  #1a3a1a;
+  --lime:    #a8ff3e;
+  --green:   #39d353;
+  --acid:    #ccff00;
+  --amber:   #ff9500;
+  --red:     #ff3a3a;
+  --teal:    #00ffc8;
+  --muted:   #3d6b3d;
+  --text:    #b8d4b8;
+  --white:   #e8ffe8;
+  --mono:    'IBM Plex Mono',monospace;
+  --display: 'Orbitron',sans-serif;
+  --vt:      'VT323',monospace;
+}
+
+html{scroll-behavior:smooth}
+body{
+  background:var(--black);
+  color:var(--text);
+  font-family:var(--mono);
+  min-height:100vh;
+  display:flex;
+  overflow-x:hidden;
+}
+
+/* ── Hexagon bg ─────────────────────────────────────────── */
+body::after{
+  content:'';
+  position:fixed;inset:0;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='100'%3E%3Cpath d='M28 66L0 50V18L28 2l28 16v32z' fill='none' stroke='%231a3a1a' stroke-width='1'/%3E%3C/svg%3E");
+  background-size:56px 100px;
+  opacity:0.4;
+  pointer-events:none;
+  z-index:0;
+}
+
+/* ── Sidebar ────────────────────────────────────────────── */
+.sidebar{
+  width:220px;
+  min-height:100vh;
+  background:var(--deep);
+  border-right:1px solid var(--border);
+  display:flex;
+  flex-direction:column;
+  position:sticky;top:0;
+  z-index:50;
+  flex-shrink:0;
+}
+
+.sidebar-logo{
+  padding:1.5rem 1.25rem;
+  border-bottom:1px solid var(--border);
+}
+
+.hex-icon{
+  width:48px;height:48px;
+  clip-path:polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%);
+  background:linear-gradient(135deg,var(--lime),var(--teal));
+  display:grid;place-items:center;
+  margin-bottom:0.75rem;
+  animation:hex-pulse 4s ease-in-out infinite;
+}
+@keyframes hex-pulse{
+  0%,100%{filter:brightness(1) drop-shadow(0 0 8px rgba(168,255,62,0.4))}
+  50%{filter:brightness(1.2) drop-shadow(0 0 20px rgba(168,255,62,0.8))}
+}
+
+.hex-icon svg{width:24px;height:24px;fill:var(--black)}
+
+.brand-name{
+  font-family:var(--display);
+  font-size:0.75rem;font-weight:900;
+  color:var(--lime);letter-spacing:3px;
+  line-height:1.3;
+}
+.brand-sub{
+  font-size:0.55rem;color:var(--muted);
+  letter-spacing:1px;margin-top:2px;
+  font-family:var(--mono);
+}
+
+.nav{padding:1rem 0;flex:1}
+.nav-label{
+  font-size:0.55rem;color:var(--muted);
+  letter-spacing:2px;padding:0.5rem 1.25rem;
+  text-transform:uppercase;margin-top:0.5rem;
+}
+.nav-item{
+  display:flex;align-items:center;gap:10px;
+  padding:0.65rem 1.25rem;
+  font-size:0.72rem;color:var(--muted);
+  cursor:pointer;transition:all 0.2s;
+  border-left:2px solid transparent;
+  font-family:var(--mono);letter-spacing:1px;
+}
+.nav-item:hover,.nav-item.active{
+  color:var(--lime);
+  border-left-color:var(--lime);
+  background:rgba(168,255,62,0.04);
+}
+.nav-dot{
+  width:6px;height:6px;border-radius:50%;
+  background:var(--border);
+  transition:background 0.2s;
+  flex-shrink:0;
+}
+.nav-item:hover .nav-dot,.nav-item.active .nav-dot{background:var(--lime)}
+
+.sidebar-status{
+  padding:1rem 1.25rem;
+  border-top:1px solid var(--border);
+}
+.status-row{
+  display:flex;align-items:center;gap:8px;
+  font-size:0.65rem;font-family:var(--mono);
+  color:var(--muted);margin-bottom:6px;
+}
+.status-led{
+  width:7px;height:7px;border-radius:50%;
+  background:var(--border);flex-shrink:0;
+  transition:all 0.3s;
+}
+.status-led.on{
+  background:var(--green);
+  box-shadow:0 0 8px var(--green);
+  animation:led-blink 1.2s infinite;
+}
+@keyframes led-blink{0%,100%{opacity:1}50%{opacity:0.4}}
+
+#sidebarClock{
+  font-family:var(--vt);font-size:1.4rem;
+  color:var(--lime);letter-spacing:3px;
+  display:block;margin-top:4px;
+}
+
+/* ── Main Area ──────────────────────────────────────────── */
+.main-wrap{
+  flex:1;display:flex;flex-direction:column;
+  position:relative;z-index:1;
+  min-width:0;
+}
+
+/* ── Top Bar ────────────────────────────────────────────── */
+.topbar{
+  height:56px;
+  background:rgba(7,16,7,0.95);
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;
+  padding:0 1.5rem;gap:1rem;
+  position:sticky;top:0;z-index:40;
+  backdrop-filter:blur(8px);
+}
+
+.topbar-title{
+  font-family:var(--display);font-size:0.7rem;
+  font-weight:700;color:var(--text);
+  letter-spacing:2px;flex:1;
+}
+
+.ctrl-btn{
+  font-family:var(--display);font-size:0.6rem;
+  font-weight:700;letter-spacing:2px;
+  padding:7px 16px;border:none;border-radius:4px;
+  cursor:pointer;transition:all 0.2s;
+  text-transform:uppercase;
+}
+.ctrl-start{
+  background:var(--lime);color:var(--black);
+}
+.ctrl-start:hover{
+  background:var(--acid);
+  box-shadow:0 0 20px rgba(168,255,62,0.5);
+  transform:translateY(-1px);
+}
+.ctrl-stop{
+  background:transparent;color:var(--red);
+  border:1px solid var(--red);
+}
+.ctrl-stop:hover{background:var(--red);color:var(--white)}
+
+.ctrl-ghost{
+  background:transparent;color:var(--muted);
+  border:1px solid var(--border);
+  font-family:var(--mono);font-size:0.65rem;
+}
+.ctrl-ghost:hover{color:var(--amber);border-color:var(--amber)}
+
+.status-tag{
+  font-family:var(--mono);font-size:0.6rem;
+  letter-spacing:2px;padding:4px 12px;
+  border-radius:2px;transition:all 0.3s;
+}
+.status-tag.off{
+  background:rgba(61,107,61,0.2);
+  color:var(--muted);border:1px solid var(--border);
+}
+.status-tag.on{
+  background:rgba(57,211,83,0.1);
+  color:var(--green);border:1px solid rgba(57,211,83,0.4);
+}
+
+/* ── Content ────────────────────────────────────────────── */
+.content{padding:1.5rem;flex:1}
+
+/* ── Metrics Row ────────────────────────────────────────── */
+.metrics{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:1rem;margin-bottom:1.5rem;
+}
+
+.metric{
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:6px;
+  padding:1.25rem;
+  position:relative;overflow:hidden;
+  transition:all 0.25s;
+}
+.metric:hover{
+  border-color:var(--lime);
+  transform:translateY(-2px);
+  box-shadow:0 8px 32px rgba(168,255,62,0.08);
+}
+
+/* corner accent */
+.metric::after{
+  content:'';
+  position:absolute;top:0;right:0;
+  width:40px;height:40px;
+  background:linear-gradient(225deg,var(--accent-c) 0%,transparent 60%);
+  opacity:0.15;
+}
+.metric.m-total{--accent-c: #00ffc8}
+.metric.m-norm {--accent-c: #a8ff3e}
+.metric.m-susp {--accent-c: #ff9500}
+.metric.m-blk  {--accent-c: #ff3a3a}
+
+.metric-label{
+  font-size:0.55rem;color:var(--muted);
+  letter-spacing:3px;text-transform:uppercase;
+  margin-bottom:0.6rem;font-family:var(--mono);
+}
+.metric-val{
+  font-family:var(--display);font-weight:900;
+  font-size:2.8rem;line-height:1;
+  transition:all 0.4s;
+}
+.m-total .metric-val{color:var(--teal)}
+.m-norm  .metric-val{color:var(--lime)}
+.m-susp  .metric-val{color:var(--amber)}
+.m-blk   .metric-val{color:var(--red)}
+
+.metric-hint{
+  font-size:0.6rem;color:var(--muted);
+  margin-top:6px;font-family:var(--mono);
+  letter-spacing:1px;
+}
+
+/* ── Charts ─────────────────────────────────────────────── */
+.charts-row{
+  display:grid;grid-template-columns:3fr 2fr;
+  gap:1rem;margin-bottom:1.5rem;
+}
+
+/* ── Panel ──────────────────────────────────────────────── */
+.panel{
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:6px;overflow:hidden;
+}
+
+.panel-head{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0.75rem 1rem;
+  border-bottom:1px solid var(--border);
+  background:rgba(168,255,62,0.02);
+}
+
+.panel-title{
+  font-family:var(--display);font-size:0.6rem;
+  font-weight:700;color:var(--lime);
+  letter-spacing:3px;text-transform:uppercase;
+  display:flex;align-items:center;gap:8px;
+}
+.panel-title::before{
+  content:'';display:block;
+  width:8px;height:8px;
+  clip-path:polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%);
+  background:var(--lime);flex-shrink:0;
+}
+
+.panel-badge{
+  font-family:var(--mono);font-size:0.58rem;
+  color:var(--muted);border:1px solid var(--border);
+  padding:2px 8px;border-radius:2px;
+  background:rgba(168,255,62,0.03);
+  letter-spacing:1px;
+}
+
+.panel-body{padding:1rem}
+.chart-h{position:relative;height:200px}
+
+/* ── Bottom Grid ────────────────────────────────────────── */
+.bottom-grid{
+  display:grid;
+  grid-template-columns:2.5fr 1fr 1fr;
+  gap:1rem;
+}
+
+/* ── Log Table ──────────────────────────────────────────── */
+.log-wrap{overflow:auto;max-height:380px}
+
+table{width:100%;border-collapse:collapse;font-size:0.72rem}
+thead th{
+  font-size:0.55rem;letter-spacing:2px;
+  color:var(--muted);text-transform:uppercase;
+  padding:8px 12px;text-align:left;
+  background:var(--deep);
+  border-bottom:1px solid var(--border);
+  position:sticky;top:0;z-index:1;
+  font-family:var(--mono);
+}
+tbody tr{
+  border-bottom:1px solid rgba(26,58,26,0.5);
+  transition:background 0.1s;
+  animation:fadein 0.3s ease;
+}
+@keyframes fadein{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:none}}
+tbody tr:hover{background:rgba(168,255,62,0.03)}
+td{padding:8px 12px;font-family:var(--mono);white-space:nowrap}
+td.c-ip{color:var(--teal);font-size:0.7rem}
+td.c-time{color:var(--muted);font-size:0.65rem}
+td.c-port{color:var(--muted)}
+td.c-att{color:var(--text);font-family:var(--vt);font-size:1rem}
+
+.tag{
+  font-family:var(--mono);font-size:0.58rem;
+  letter-spacing:1px;text-transform:uppercase;
+  padding:2px 8px;border-radius:2px;
+  font-weight:600;
+}
+.tag-n{background:rgba(168,255,62,0.1);color:var(--lime);border:1px solid rgba(168,255,62,0.3)}
+.tag-s{background:rgba(255,149,0,0.1);color:var(--amber);border:1px solid rgba(255,149,0,0.4)}
+
+/* ── Blocked list ───────────────────────────────────────── */
+.b-list{display:flex;flex-direction:column;gap:6px;max-height:340px;overflow-y:auto}
+.b-item{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:8px 10px;
+  background:rgba(255,58,58,0.04);
+  border:1px solid rgba(255,58,58,0.15);
+  border-radius:4px;
+  font-family:var(--mono);font-size:0.7rem;
+  color:var(--red);animation:fadein 0.3s ease;
+  transition:all 0.2s;
+}
+.b-item:hover{background:rgba(255,58,58,0.1);border-color:var(--red)}
+
+.ub-btn{
+  font-family:var(--mono);font-size:0.58rem;
+  padding:3px 8px;background:transparent;
+  border:1px solid rgba(255,58,58,0.3);
+  color:var(--red);border-radius:2px;cursor:pointer;
+  letter-spacing:1px;transition:all 0.2s;
+}
+.ub-btn:hover{background:var(--red);color:var(--white)}
+
+/* ── Alert list ─────────────────────────────────────────── */
+.a-list{display:flex;flex-direction:column;gap:5px;max-height:340px;overflow-y:auto}
+.a-item{
+  padding:8px 10px;
+  border-left:2px solid var(--amber);
+  background:rgba(255,149,0,0.04);
+  border-radius:0 4px 4px 0;
+  font-size:0.65rem;font-family:var(--mono);
+  animation:fadein 0.3s ease;
+}
+.a-item.a-info{border-left-color:var(--lime);background:rgba(168,255,62,0.03)}
+.a-time{color:var(--muted);font-size:0.6rem;margin-bottom:2px}
+.a-msg{color:var(--amber);font-size:0.68rem}
+.a-item.a-info .a-msg{color:var(--lime)}
+
+/* ── Empty ──────────────────────────────────────────────── */
+.empty{
+  text-align:center;padding:2rem;
+  color:var(--muted);font-family:var(--vt);
+  font-size:1.1rem;letter-spacing:2px;
+}
+
+/* ── Terminal ticker ────────────────────────────────────── */
+.ticker{
+  background:var(--deep);
+  border-top:1px solid var(--border);
+  padding:6px 1.5rem;
+  font-family:var(--vt);font-size:0.9rem;
+  color:var(--muted);letter-spacing:2px;
+  white-space:nowrap;overflow:hidden;
+}
+.ticker-inner{
+  display:inline-block;
+  animation:scroll-left 40s linear infinite;
+}
+@keyframes scroll-left{from{transform:translateX(100vw)}to{transform:translateX(-100%)}}
+
+/* ── Toast ──────────────────────────────────────────────── */
+#toast{
+  position:fixed;bottom:1.5rem;right:1.5rem;
+  background:var(--card);
+  border:1px solid var(--amber);
+  color:var(--amber);
+  padding:10px 16px;border-radius:4px;
+  font-family:var(--mono);font-size:0.75rem;
+  box-shadow:0 0 30px rgba(255,149,0,0.2);
+  transform:translateY(60px);opacity:0;
+  transition:all 0.25s;z-index:9999;
+  max-width:320px;letter-spacing:1px;
+}
+#toast.show{transform:translateY(0);opacity:1}
+#toast.t-info{border-color:var(--lime);color:var(--lime);box-shadow:0 0 30px rgba(168,255,62,0.15)}
+
+/* ── Scrollbar ──────────────────────────────────────────── */
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:var(--deep)}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+
+/* ── Responsive ─────────────────────────────────────────── */
+@media(max-width:1200px){
+  .bottom-grid{grid-template-columns:2fr 1fr}
+  .bottom-grid .panel:last-child{grid-column:1/-1}
+}
+@media(max-width:900px){
+  .sidebar{width:180px}
+  .metrics{grid-template-columns:repeat(2,1fr)}
+  .charts-row{grid-template-columns:1fr}
+  .bottom-grid{grid-template-columns:1fr}
+}
+@media(max-width:600px){
+  .sidebar{display:none}
+  .metrics{grid-template-columns:repeat(2,1fr)}
+}
+</style>
+</head>
+<body>
+
+<!-- ── Sidebar ───────────────────────────────────────────── -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="hex-icon">
+      <svg viewBox="0 0 24 24"><path d="M12 2l9 5v10l-9 5-9-5V7z"/></svg>
+    </div>
+    <div class="brand-name">AGRI<br>SENSE</div>
+    <div class="brand-sub">THREAT INTELLIGENCE v2.1</div>
+  </div>
+
+  <nav class="nav">
+    <div class="nav-label">System</div>
+    <div class="nav-item active">
+      <span class="nav-dot"></span>DASHBOARD
+    </div>
+    <div class="nav-item">
+      <span class="nav-dot"></span>LIVE MONITOR
+    </div>
+    <div class="nav-item">
+      <span class="nav-dot"></span>ANALYTICS
+    </div>
+    <div class="nav-label">Data</div>
+    <div class="nav-item">
+      <span class="nav-dot"></span>LOG VIEWER
+    </div>
+    <div class="nav-item">
+      <span class="nav-dot"></span>BLOCKED IPs
+    </div>
+    <div class="nav-label">Config</div>
+    <div class="nav-item">
+      <span class="nav-dot"></span>SETTINGS
+    </div>
+    <div class="nav-item">
+      <span class="nav-dot"></span>ABOUT
+    </div>
+  </nav>
+
+  <div class="sidebar-status">
+    <div class="status-row">
+      <div class="status-led" id="sidebarLed"></div>
+      <span id="sidebarStatus">HONEYPOT OFFLINE</span>
+    </div>
+    <div class="status-row">
+      <div class="status-led on"></div>
+      <span>FLASK SERVER ONLINE</span>
+    </div>
+    <span id="sidebarClock">00:00:00</span>
+  </div>
+</aside>
+
+<!-- ── Main ──────────────────────────────────────────────── -->
+<div class="main-wrap">
+
+  <!-- Top Bar -->
+  <div class="topbar">
+    <div class="topbar-title">HONEYPOT CONTROL PANEL · PORT 8888 · TCP/IPv4</div>
+    <span class="status-tag off" id="statusTag">■ OFFLINE</span>
+    <button class="ctrl-btn ctrl-start" onclick="startHoneypot()">▶ ACTIVATE</button>
+    <button class="ctrl-btn ctrl-stop"  onclick="stopHoneypot()">■ DEACTIVATE</button>
+    <button class="ctrl-btn ctrl-ghost" onclick="clearLogs()">⊘ FLUSH LOGS</button>
+  </div>
+
+  <!-- Content -->
+  <div class="content">
+
+    <!-- Metrics -->
+    <div class="metrics">
+      <div class="metric m-total">
+        <div class="metric-label">// total connections</div>
+        <div class="metric-val" id="mTotal">0</div>
+        <div class="metric-hint">ALL LOGGED ATTEMPTS</div>
+      </div>
+      <div class="metric m-norm">
+        <div class="metric-label">// normal traffic</div>
+        <div class="metric-val" id="mNorm">0</div>
+        <div class="metric-hint">BELOW THRESHOLD</div>
+      </div>
+      <div class="metric m-susp">
+        <div class="metric-label">// suspicious</div>
+        <div class="metric-val" id="mSusp">0</div>
+        <div class="metric-hint">5+ ATTEMPTS FLAGGED</div>
+      </div>
+      <div class="metric m-blk">
+        <div class="metric-label">// blocked IPs</div>
+        <div class="metric-val" id="mBlk">0</div>
+        <div class="metric-hint">PERMANENTLY DENIED</div>
+      </div>
+    </div>
+
+    <!-- Charts -->
+    <div class="charts-row">
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-title">ATTACK TIMELINE</div>
+          <div class="panel-badge">REAL-TIME · LINE</div>
+        </div>
+        <div class="panel-body">
+          <div class="chart-h"><canvas id="cTime"></canvas></div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-title">IP HEATMAP</div>
+          <div class="panel-badge">TOP ATTACKERS</div>
+        </div>
+        <div class="panel-body">
+          <div class="chart-h"><canvas id="cIP"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom Grid -->
+    <div class="bottom-grid">
+
+      <!-- Log Table -->
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-title">LIVE CONNECTION LOG</div>
+          <div class="panel-badge" id="logBadge">0 ENTRIES</div>
+        </div>
+        <div class="log-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>TIMESTAMP</th>
+                <th>IP ADDRESS</th>
+                <th>PORT</th>
+                <th>ATT</th>
+                <th>STATUS</th>
+              </tr>
+            </thead>
+            <tbody id="logBody">
+              <tr><td colspan="5" class="empty">[ AWAITING CONNECTIONS ]</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Blocked -->
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-title">BLOCKED</div>
+          <div class="panel-badge" id="blkBadge">0</div>
+        </div>
+        <div class="panel-body" style="padding:0.75rem">
+          <div class="b-list" id="blkList">
+            <div class="empty">[ NONE ]</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Alerts -->
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-title">ALERTS</div>
+          <div class="panel-badge">LIVE</div>
+        </div>
+        <div class="panel-body" style="padding:0.75rem">
+          <div class="a-list" id="aList">
+            <div class="empty">[ QUIET ]</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Ticker -->
+  <div class="ticker">
+    <span class="ticker-inner">
+      AGRISENSE HONEYPOT v2.1 &nbsp;·&nbsp;
+      MONITORING PORT 8888 &nbsp;·&nbsp;
+      AGRICULTURE THREAT INTELLIGENCE &nbsp;·&nbsp;
+      PRJN26-205 · FARHAN N METHER · YENEPOYA UNIVERSITY 2026 &nbsp;·&nbsp;
+      PYTHON + FLASK + SOCKET + THREADING &nbsp;·&nbsp;
+      THRESHOLD: 5 ATTEMPTS = SUSPICIOUS &nbsp;·&nbsp;
+      PERSISTENT IP BLOCKING ENABLED &nbsp;·&nbsp;
+      AGRISENSE HONEYPOT v2.1 &nbsp;·&nbsp;
+    </span>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ── Clock ────────────────────────────────────────────────────
+function tick(){
+  const t = new Date().toTimeString().split(' ')[0];
+  document.getElementById('sidebarClock').textContent = t;
+}
+setInterval(tick,1000); tick();
+
+// ── Charts ───────────────────────────────────────────────────
+const cOpts = {
+  responsive:true, maintainAspectRatio:false,
+  plugins:{legend:{display:false},tooltip:{
+    backgroundColor:'#0f1f0f',
+    borderColor:'#1a3a1a',borderWidth:1,
+    titleColor:'#a8ff3e',bodyColor:'#b8d4b8',
+    titleFont:{family:'IBM Plex Mono',size:10},
+    bodyFont:{family:'IBM Plex Mono',size:10},
+  }},
+  scales:{
+    x:{grid:{color:'rgba(26,58,26,0.6)'},
+       ticks:{color:'#3d6b3d',font:{family:'IBM Plex Mono',size:9}}},
+    y:{grid:{color:'rgba(26,58,26,0.6)'},
+       ticks:{color:'#3d6b3d',font:{family:'IBM Plex Mono',size:9}}}
+  }
+};
+
+const tChart = new Chart(document.getElementById('cTime').getContext('2d'),{
+  type:'line',
+  data:{labels:[],datasets:[{
+    data:[],
+    borderColor:'#a8ff3e',
+    backgroundColor:'rgba(168,255,62,0.06)',
+    borderWidth:2,pointBackgroundColor:'#a8ff3e',
+    pointRadius:3,pointHoverRadius:5,
+    tension:0.4,fill:true
+  }]},
+  options:cOpts
+});
+
+const iChart = new Chart(document.getElementById('cIP').getContext('2d'),{
+  type:'bar',
+  data:{labels:[],datasets:[{
+    data:[],
+    backgroundColor:ctx=>(ctx.parsed?.y??0)>=5
+      ?'rgba(255,149,0,0.7)':'rgba(0,255,200,0.5)',
+    borderColor:ctx=>(ctx.parsed?.y??0)>=5?'#ff9500':'#00ffc8',
+    borderWidth:1,borderRadius:3
+  }]},
+  options:cOpts
+});
+
+// ── Toast ────────────────────────────────────────────────────
+function toast(msg,type='w'){
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = type==='i' ? 'show t-info' : 'show';
+  setTimeout(()=>el.className='',3500);
+}
+
+// ── Fetch helpers ────────────────────────────────────────────
+const api = async(url,body=null)=>{
+  const opts = body
+    ? {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}
+    : {};
+  return (await fetch(url,opts)).json();
+};
+
+// ── Controls ─────────────────────────────────────────────────
+async function startHoneypot(){
+  await api('/api/start',{});
+  toast('▶ HONEYPOT ACTIVATED — PORT 8888','i');
+  refresh();
+}
+async function stopHoneypot(){
+  await api('/api/stop',{});
+  toast('■ HONEYPOT DEACTIVATED');
+  refresh();
+}
+async function clearLogs(){
+  if(!confirm('FLUSH ALL LOGS? CANNOT BE UNDONE.')) return;
+  await api('/api/clear_logs',{});
+  toast('⊘ LOGS FLUSHED','i');
+  refresh();
+}
+async function unblockIP(ip){
+  await api('/api/unblock',{ip});
+  toast('✓ UNBLOCKED: '+ip,'i');
+  refresh();
+}
+
+// ── Status ───────────────────────────────────────────────────
+let prevTotal=0;
+
+async function refreshStatus(){
+  const d = await api('/api/status');
+  const led  = document.getElementById('sidebarLed');
+  const stat = document.getElementById('sidebarStatus');
+  const tag  = document.getElementById('statusTag');
+  if(d.running){
+    led.className='status-led on';
+    stat.textContent='HONEYPOT ACTIVE';
+    tag.className='status-tag on';
+    tag.textContent='● ONLINE';
+  } else {
+    led.className='status-led';
+    stat.textContent='HONEYPOT OFFLINE';
+    tag.className='status-tag off';
+    tag.textContent='■ OFFLINE';
+  }
+}
+
+async function refreshStats(){
+  const d = await api('/api/stats');
+  anim('mTotal',d.total);
+  anim('mNorm', d.normal);
+  anim('mSusp', d.suspicious);
+  anim('mBlk',  d.blocked);
+  if(d.total>prevTotal&&prevTotal>0)
+    toast(`⚡ ${d.total-prevTotal} NEW CONNECTION(S)`);
+  prevTotal=d.total;
+  tChart.data.labels=d.time_chart.labels;
+  tChart.data.datasets[0].data=d.time_chart.values;
+  tChart.update('none');
+  iChart.data.labels=d.ip_chart.labels;
+  iChart.data.datasets[0].data=d.ip_chart.values;
+  iChart.update('none');
+}
+
+async function refreshLogs(){
+  const rows = await api('/api/logs');
+  const tb = document.getElementById('logBody');
+  document.getElementById('logBadge').textContent=rows.length+' ENTRIES';
+  if(!rows.length){
+    tb.innerHTML='<tr><td colspan="5" class="empty">[ AWAITING CONNECTIONS ]</td></tr>';
+    return;
+  }
+  tb.innerHTML=rows.slice(0,100).map(r=>`
+    <tr>
+      <td class="c-time">${r.Time}</td>
+      <td class="c-ip">${r['IP Address']}</td>
+      <td class="c-port">${r.Port}</td>
+      <td class="c-att">${r.Attempts}</td>
+      <td><span class="tag tag-${r.Status==='Normal'?'n':'s'}">${r.Status}</span></td>
+    </tr>`).join('');
+}
+
+async function refreshBlocked(){
+  const ips = await api('/api/blocked');
+  const el  = document.getElementById('blkList');
+  document.getElementById('blkBadge').textContent=ips.length;
+  if(!ips.length){el.innerHTML='<div class="empty">[ NONE ]</div>';return;}
+  el.innerHTML=ips.map(ip=>`
+    <div class="b-item">
+      <span>⊘ ${ip}</span>
+      <button class="ub-btn" onclick="unblockIP('${ip}')">UNBLOCK</button>
+    </div>`).join('');
+}
+
+async function refreshAlerts(){
+  const al = await api('/api/alerts');
+  const el = document.getElementById('aList');
+  if(!al.length){el.innerHTML='<div class="empty">[ QUIET ]</div>';return;}
+  el.innerHTML=al.map(a=>{
+    const info=a.message.includes('STARTED')||a.message.includes('STOPPED')||a.message.includes('unblocked');
+    return`<div class="a-item ${info?'a-info':''}">
+      <div class="a-time">${a.time}</div>
+      <div class="a-msg">${a.message}</div>
+    </div>`;
+  }).join('');
+}
+
+function anim(id,target){
+  const el=document.getElementById(id);
+  const start=parseInt(el.textContent)||0;
+  if(start===target)return;
+  const step=(target-start)/16;
+  let cur=start;
+  const iv=setInterval(()=>{
+    cur+=step;
+    if((step>0&&cur>=target)||(step<0&&cur<=target)){cur=target;clearInterval(iv);}
+    el.textContent=Math.round(cur);
+  },25);
+}
+
+function refresh(){
+  Promise.all([refreshStatus(),refreshStats(),refreshLogs(),refreshBlocked(),refreshAlerts()]);
+}
+
+refresh();
+setInterval(refresh,3000);
+</script>
+</body>
+</html>
